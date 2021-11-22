@@ -1,0 +1,54 @@
+#!/usr/bin/ruby
+
+# Inspired by https://stackoverflow.com/a/5873796/188760
+
+require "socket"
+require "openssl"
+require "thread"
+
+raise "Usage: #$0 <port> <certificate path> <key path>" if ARGV.size != 3
+
+port, cert_path, key_path = ARGV
+port = Integer(port)
+
+server = TCPServer.new(port)
+ssl_context = OpenSSL::SSL::SSLContext.new
+ssl_context.cert = File.open(cert_path) { |f| OpenSSL::X509::Certificate.new(f) }
+ssl_context.key = File.open(key_path) { |f| OpenSSL::PKey::RSA.new(f) }
+ssl_server = OpenSSL::SSL::SSLServer.new(server, ssl_context)
+
+puts "Listening on port #{port}"
+
+loop do
+  connection = ssl_server.accept
+  Thread.new do
+    begin
+      response = ""
+      loop do
+        raw_line = connection.gets
+        break unless raw_line
+        line = raw_line.chomp
+        break if line.empty?
+        STDOUT.puts(line)
+        response << raw_line
+      end
+
+      full_response = [
+        "HTTP/1.1 200 OK",
+        "Content-type: text/plain",
+        "Content-length: #{response.size}",
+        "",
+        response
+      ].join("\n")
+
+      STDOUT.puts(full_response)
+      connection.write(full_response)
+
+      connection.close
+    rescue => e
+      STDERR.puts("#{e.message} (#{e.class})")
+      STDERR.puts(e.backtrace.join("\n"))
+    end
+  end
+end
+
