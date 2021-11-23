@@ -6,15 +6,18 @@ require "socket"
 require "openssl"
 require "thread"
 
-raise "Usage: #$0 <port> <certificate path> <key path>" if ARGV.size != 3
+raise "Usage: #$0 <port> <certificate path> <key path> <ca cert path>" if ARGV.size != 4
 
-port, cert_path, key_path = ARGV
+port, cert_path, key_path, ca_cert_path = ARGV
 port = Integer(port)
 
 server = TCPServer.new(port)
 ssl_context = OpenSSL::SSL::SSLContext.new
-ssl_context.cert = File.open(cert_path) { |f| OpenSSL::X509::Certificate.new(f) }
-ssl_context.key = File.open(key_path) { |f| OpenSSL::PKey::RSA.new(f) }
+ssl_context.add_certificate(
+  File.open(cert_path) { |f| OpenSSL::X509::Certificate.new(f) },
+  File.open(key_path) { |f| OpenSSL::PKey::RSA.new(f) },
+  [File.open(ca_cert_path) { |f| OpenSSL::X509::Certificate.new(f) }],
+)
 ssl_server = OpenSSL::SSL::SSLServer.new(server, ssl_context)
 
 puts "Listening on port #{port}"
